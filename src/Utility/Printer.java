@@ -34,7 +34,7 @@ public class Printer {
 			if( attacker.getLabel(i)==-1 ){
 				for(int fId : attacker.getWeightIdSet() ) {
 					if(fId > 0) fout.write(" ");
-						fout.write(""+attacker.featureDis(i, fId) );
+						fout.write(""+attacker.getFeatureDis(i, fId) );
 						// TODO Auto-generated catch block
 					}
 				}
@@ -43,6 +43,24 @@ public class Printer {
 			e.printStackTrace();
 		}
 	}
+	
+	/**
+	 * Print the response modification, with one feature value with index fId
+	 * @param attacker   the attacker
+	 * @param fId   the corresponding feature id
+	 */
+	public void printResponseModification( AttackLinearLearner attacker, int fId ) {
+		try {
+			for(int i = 0; i < attacker.getNumDataInstances(); i++) {
+				fout.write(""+attacker.getCurFeature(i, fId) + " " + attacker.getOriginResponse(i) 
+									+ " " + attacker.getCurResponse(i) + "\n" );
+						// TODO Auto-generated catch block
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
 	
 	public void printWeights(BufferedWriter foutP, AttackLinearLearner attacker) {
 		try {

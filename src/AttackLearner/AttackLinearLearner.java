@@ -1,13 +1,19 @@
 package AttackLearner;
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
+import Utility.Utility;
 import de.bwaldvogel.liblinear.InvalidInputDataException;
+import de.bwaldvogel.liblinear.Train;
 
 
 
@@ -39,7 +45,28 @@ public abstract class AttackLinearLearner {
 	// the L1-norm attack effort
 	protected double L1Effort;
 	
+	// the mean feature values among data points
+	HashMap<Integer, Double> meanX;
+
+	// the L1 norm of feature values among data points
+	HashMap<Integer, Double> normX;
+
+	/**
+	 * initialize all members
+	 */
+	AttackLinearLearner(){
+		targetWeights = new HashMap<Integer, Double>();
+				
+		originX = new ArrayList<HashMap<Integer,Double> >();
+		curX = new ArrayList<HashMap<Integer, Double> >();
+		originY = new ArrayList<Double>();
+		curY = new ArrayList<Double>();
+			
+		labels = new ArrayList<Integer>();
 		
+		L2Effort = 0.0;
+		L1Effort = 0.0;
+	}
 	
 	/**
 	 * return number of training data instance
@@ -77,6 +104,25 @@ public abstract class AttackLinearLearner {
 	public int getLabel(int dataId) {
 		return labels.get(dataId);
 	}
+
+	/**
+	 * return current response of instance dataId
+	 * @param i
+	 * @return
+	 */
+	public double getCurResponse(int dataId) {
+		return curY.get(dataId);
+	}
+	
+	/**
+	 * return original response of instance dataId
+	 * @param i
+	 * @return
+	 */
+	public double getOriginResponse(int dataId) {
+		return originY.get(dataId);
+	}
+
 	
 	/**
 	 * get the L2-norm attack effort
@@ -157,6 +203,57 @@ public abstract class AttackLinearLearner {
 	{
 		double res = learnedWeights.get(fId) - targetWeights.get(fId);
 		return res;
+	}
+	
+	/**
+	 * normalize each feature among all datapoints
+	 * and scale the target weights accordingly		
+	 * @param
+	 * @return 
+	 * @return
+	 */
+	public void normalizeDataAndTargetWeights() {
+		meanX = new HashMap<Integer, Double>();
+		normX = new HashMap<Integer, Double>();
+
+		for(int fId : targetWeights.keySet()) {
+			meanX.put(fId, 0.0);
+			normX.put(fId, 0.0);
+			
+			for(int dataId=0; dataId<curX.size(); ++dataId)
+				meanX.put( fId, meanX.get(fId)+curX.get(dataId).get(fId) );
+			meanX.put(fId, meanX.get(fId)/curX.size());
+			
+			for(int dataId = 0; dataId < curX.size(); ++dataId) {
+				curX.get(dataId).put(fId, curX.get(dataId).get(fId)-meanX.get(fId));
+				normX.put(fId, normX.get(fId) + Math.abs(curX.get(dataId).get(fId)) );
+			}
+			normX.put(fId, normX.get(fId)/curX.size());
+			for(int dataId = 0; dataId < curX.size(); ++dataId) {
+				curX.get(dataId).put(fId, curX.get(dataId).get(fId)/normX.get(fId));
+				//System.out.println(curX.get(dataId).get(fId));
+			}
+			
+			targetWeights.put(fId, targetWeights.get(fId)*normX.get(fId));
+		}
+		
+	}
+
+	/**
+	 * recover the dataset by times the norms and add the mean. 
+	 * and scale the target weights accordingly		
+	 * @param
+	 * @return
+	 */
+	public void recoverDatasetFromMeanAndNorm() {
+		// recover each feature 
+		for(int fId : targetWeights.keySet()) {
+			for(int dataId = 0; dataId < curX.size(); ++dataId)
+				curX.get(dataId).put(fId, curX.get(dataId).get(fId)*normX.get(fId) + meanX.get(fId));
+			learnedWeights.put(0, learnedWeights.get(0) - learnedWeights.get(fId)*meanX.get(fId)/normX.get(fId) );
+			learnedWeights.put(fId, learnedWeights.get(fId)/normX.get(fId) );
+			targetWeights.put(fId, targetWeights.get(fId)/normX.get(fId));
+		}
 	}
 	
 	/**
@@ -246,8 +343,20 @@ public abstract class AttackLinearLearner {
 	 * @param fId
 	 * @return
 	 */
-	public double featureDis(int i, int fId) {
+	public double getFeatureDis(int i, int fId) {
 		return originX.get(i).get(fId) - curX.get(i).get(fId);
 	}
-
+	
+	/**
+	 * get L2-norm of feature distance for dataId
+	 * @param dataId
+	 * @return L2-norm of feature distance
+	 */
+	private double getNormFeatureDiff(int dataId) {
+		double l2normFeatureDiff = 0;
+		for(int fId : curX.get(dataId).keySet()) {
+			l2normFeatureDiff += Math.pow(curX.get(dataId).get(fId) - originX.get(dataId).get(fId), 2.0);
+		}
+		return Math.pow(l2normFeatureDiff, 0.5);
+	}
 }

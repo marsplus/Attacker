@@ -18,13 +18,12 @@ import de.bwaldvogel.liblinear.InvalidInputDataException;
 import de.bwaldvogel.liblinear.Problem;
 import de.bwaldvogel.liblinear.Train;
 
-public class AttackMedianRegression extends AttackLinearLearner {
+public class AttackOrdinaryLeastSquare extends AttackLinearLearner {
 	private Problem problem;
 	// regularization parameter
 	private double C;
 	// the total amount of modification can be done on feature
 	private double attackBudget;
-	final double ratio = 0.5;
 	
 	public void setAttackBudget( double a ) {
 		attackBudget = a;
@@ -43,7 +42,6 @@ public class AttackMedianRegression extends AttackLinearLearner {
 			IOException, InvalidInputDataException {
 		// read the target weights
 		BufferedReader finTargetWeight = new BufferedReader( new FileReader( targetWeightFileName ));
-		targetWeights = new HashMap<Integer, Double>();
 		String line = "";
 		while( (line = finTargetWeight.readLine()) != null ) {
 			String str[] = line.split(":");
@@ -59,10 +57,6 @@ public class AttackMedianRegression extends AttackLinearLearner {
 		problem = Train.readProblemFromFiles( trainFiles , 0 );
 		System.out.println(problem.n);
 		System.out.println(problem.l);
-		originX = new ArrayList<HashMap<Integer,Double> >();
-		curX = new ArrayList<HashMap<Integer, Double> >();
-		curY = new ArrayList<Double>();
-		originY = new ArrayList<Double>();
 		for(int i = 0; i < problem.l; ++i) {
 			originX.add( new HashMap<Integer,Double>() );
 			// feature for bias term
@@ -74,8 +68,7 @@ public class AttackMedianRegression extends AttackLinearLearner {
 			}
 			curX.add( (HashMap<Integer, Double>) originX.get(i).clone() );
 		}
-			
-		labels = new ArrayList<Integer>();
+	
 		for(int i = 0; i < problem.l; ++i)
 			labels.add( Utility.getLabel(problem.y[i]) );
 		
@@ -83,7 +76,7 @@ public class AttackMedianRegression extends AttackLinearLearner {
 		L1Effort = 0.0;
 
 		// set the regularization parameter and the attack attackBudget
-		C = 100;
+		C = 10;
 		System.out.println( "PARAMETERS: C = " + C);
 	}
 
@@ -97,11 +90,9 @@ public class AttackMedianRegression extends AttackLinearLearner {
 		HashMap<Integer, Double> deltaW = new HashMap<Integer, Double>();
 		while( iter<1000 && diff>1e-3 ) {
 			iter += 1;
-			stepLength = Math.max(0.5/iter, 0.05/1000);
+			stepLength = Math.max(0.01/iter, 0.005/1000);
 			
 			// calc the gradient of the robust SVM objective
-			for(int fId : learnedWeights.keySet())
-				deltaW.put(fId, learnedWeights.get(fId));
 			for(int dataId = 0; dataId < problem.l; ++dataId)
 				addGradLossInstance(dataId, deltaW, learnedWeights);
 			
@@ -125,20 +116,19 @@ public class AttackMedianRegression extends AttackLinearLearner {
 			HashMap<Integer, Double> learnedWeights) {
 		double y = curY.get(dataId);
 		double pred = prediction(curX.get(dataId), learnedWeights);
-		double ratioCurInstance = getRatio(y, pred);
 
 		for(int fId : curX.get(dataId).keySet()) {
 			if( deltaW.containsKey(fId) )
-				deltaW.put(fId, deltaW.get(fId) - C*ratioCurInstance*curX.get(dataId).get(fId));
+				deltaW.put(fId, deltaW.get(fId) + (pred-y)*curX.get(dataId).get(fId));
 			else
-				deltaW.put(fId, 				- C*ratioCurInstance*curX.get(dataId).get(fId));					
+				deltaW.put(fId, 				+ (pred-y)*curX.get(dataId).get(fId));					
 		}
 	}
 	
 
 	@Override
 	public void takeGradient(double stepLength, double attackBudget, BufferedWriter fout) {
-		double regularization = 0.0005; // use a large number as the regularization
+		double regularization = 0.002; // use a large number as the regularization
 		Matrix gradWY = gradImplicitFunction();
 		for(int dataId = 0; dataId < curX.size(); dataId++) {
 			System.out.println("gradWY = " + gradWY.get(0, dataId));
@@ -146,37 +136,22 @@ public class AttackMedianRegression extends AttackLinearLearner {
 		for(int dataId = 0; dataId < curX.size(); dataId++) {
 			double y = curY.get(dataId);
 			double pred = this.prediction(curX.get(dataId), learnedWeights);
-			
-			// TODO Auto-generated method stub
-				
-			// for L2 norm regularized SVM
+							
 			double delta = 0.0; // C*weightDis(fId)*ratioCurInstance;
 			for(int wId : curX.get(dataId).keySet()) 
 				if( targetWeights.containsKey(wId) ) {
 					delta += weightDis(wId)*gradWY.get(wId-1, dataId);
 				}
-					
-			//if( L1Effort > attackBudget ) { // if the modification exceeds the attackBudget
-				//delta += regularization*(curY.get(dataId) - originY.get(dataId));
-			//}				
+
 			double newY = Utility.softThreshold( curY.get(dataId) - stepLength * delta, originY.get(dataId), stepLength*regularization);
-			curY.set(dataId, newY);
-			
+			if( dataId==curX.size()-1 )
+				curY.set(dataId, newY);
 			System.out.println( ""+ dataId + "deltaY" + delta + " " + curY.get(dataId) + " " + originY.get(dataId) );
 		}
 		calcYEffort();
 		System.out.println( "L1Effort"+ this.L1Effort + " L2Effort" + this.L2Effort );		
 	}
 	
-	private double getRatio(double y, double pred) {
-		// TODO Auto-generated method stub
-		if( y - pred > 0 ) {
-			return ratio;
-		} else {
-			return ratio-1;
-		}
-	}
-
 	@Override
 	public double getLossOriginX() {
 		double loss = 0.0;
@@ -198,15 +173,13 @@ public class AttackMedianRegression extends AttackLinearLearner {
 	
 		for(int dataId = 0; dataId < problem.l; ++dataId) {
 			double pred = this.prediction(curX.get(dataId), learnedWeights);
-			if( Math.abs(curY.get(dataId)-pred) < 1 ) { // |pred - actual| <= threshold
-				for(int fIdRow : targetWeights.keySet()) 
-					for(int fIdCol : targetWeights.keySet()) 
-						jacob.set(fIdRow-1, fIdCol-1, jacob.get(fIdRow-1, fIdCol-1) + C*curX.get(dataId).get(fIdRow)*curX.get(dataId).get(fIdCol) );
+			for(int fIdRow : targetWeights.keySet()) 
+				for(int fIdCol : targetWeights.keySet()) 
+					jacob.set(fIdRow-1, fIdCol-1, jacob.get(fIdRow-1, fIdCol-1) + C*curX.get(dataId).get(fIdRow)*curX.get(dataId).get(fIdCol) );
 
-				for(int fId : curX.get(dataId).keySet()) 
-					if( targetWeights.containsKey(fId) )
-						gradWY.set(fId-1, dataId, -C*curX.get(dataId).get(fId));
-			}
+			for(int fId : curX.get(dataId).keySet()) 
+				if( targetWeights.containsKey(fId) )
+					gradWY.set(fId-1, dataId, -C*curX.get(dataId).get(fId));
 		}
 		
 		Matrix jacobInv = (jacob.inverse()).times(gradWY); // gradient of hat{w} w.r.t. y = jacob^-1 * gradWY

@@ -12,6 +12,16 @@ public class Utility {
 		
 	}
 	
+	public static double softThreshold(double a, Double b, double threshold) {
+		// TODO Auto-generated method stub
+		if( a-b > threshold )
+			return a-threshold;
+		else if( a-b < -threshold )
+			return a+threshold;
+		else
+			return b;
+	}
+	
 	public static double sigmoid( double x ) {
 		return 1.0 / (1 + Math.exp(-x));
 	}

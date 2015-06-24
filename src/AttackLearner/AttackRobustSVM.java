@@ -206,14 +206,6 @@ public class AttackRobustSVM extends AttackLinearLearner {
 		calcEffort();
 	}
 	
-	private double getNormFeatureDiff(int dataId) {
-		double l2normFeatureDiff = 0;
-		for(int fId : curX.get(dataId).keySet()) {
-			l2normFeatureDiff += Math.pow(curX.get(dataId).get(fId) - originX.get(dataId).get(fId), 2.0);
-		}
-		return Math.pow(l2normFeatureDiff, 0.5);
-	}
-
 	public void gradImplicitFunction()
 	{
 		double grad[][] = new double[problem.n][problem.n];

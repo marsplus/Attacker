@@ -17,6 +17,7 @@ import Utility.Printer;
 import AttackLearner.AttackLinearLearner;
 import AttackLearner.AttackLogisticRegression;
 import AttackLearner.AttackMedianRegression;
+import AttackLearner.AttackOrdinaryLeastSquare;
 import AttackLearner.AttackRobustSVM;
 import AttackLearner.AttackSVM;
 import de.bwaldvogel.liblinear.Linear;
@@ -76,6 +77,10 @@ public class CrossValidator {
 				attacker = new AttackMedianRegression();
 				System.out.println("AttackMedianRegression");
 				break;
+			case "AttackOrdinaryLeastSquare":
+				attacker = new AttackOrdinaryLeastSquare();
+				System.out.println("AttackOrdinaryLeastSquare");
+				break;
 			case "AttackLogisticRegression":
 				attacker = new AttackLogisticRegression();
 				System.out.println("AttackLogisticRegression");
@@ -90,7 +95,8 @@ public class CrossValidator {
 				break;
 		}
 		
-		attacker.initData(DATA_PATH, targetWeightFileName, 2);		
+		attacker.initData(DATA_PATH, targetWeightFileName, 2);
+		attacker.normalizeDataAndTargetWeights();
 		printer.printWeights(fout, attacker);
 		
 		/*
@@ -123,19 +129,25 @@ public class CrossValidator {
 				System.out.println("Iter" + iter);
 
 				// calculate gradient
-				double stepLength = 20000.0 / Math.min(iter+1,40);
+				double stepLength = 60.0 / Math.min(iter+1,40);
 				attacker.learnModel( MODEL_PATH, MODEL_NAME);
 				attacker.takeGradient(stepLength, budget, fout);
 				printer.printLossEffort(fout, iter, attacker);
 				printer.printWeights(fout, attacker);
 			}
 			
+			attacker.recoverDatasetFromMeanAndNorm();
 			printer.initWriter( "optimalAttackSVMNegativeLabels.txt" );
 			printer.printFeatureModification(-1, attacker);
 			printer.closeWriter();
 			
 			printer.initWriter( "optimalAttackSVMPositiveLabels.txt" );
 			printer.printFeatureModification(1, attacker);
+			printer.closeWriter();
+			
+			//printer.initWriter( "optimalAttackMedianRegressionResponse.txt" );
+			printer.initWriter( "optimalAttackOLS.txt" );
+			printer.printResponseModification(attacker, 1);
 			printer.closeWriter();
 			
 			printer.initWriter( "dataBeforeAttack.txt" );
